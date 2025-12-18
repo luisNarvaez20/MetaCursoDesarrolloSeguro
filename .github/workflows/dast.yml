@@ -1,16 +1,17 @@
 name: 50 DAST Scan Docker Image
 
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
   workflow_dispatch:
     inputs:
       image-tag:
         type: string
         description: 'The name of the docker image to scan'
         required: true
+  workflow_call:
+    inputs:
+      image-tag:
+        required: true
+        type: string
 
 env:
   REGISTRY: ghcr.io

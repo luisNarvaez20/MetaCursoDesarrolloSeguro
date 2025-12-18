@@ -1,11 +1,8 @@
 name: 04 SAST
 
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
-  workflow_dispatch:
+  workflow_dispatch:   # permite ejecución manual
+  workflow_call:       # permite que otros workflows lo llamen
 
 jobs:
   SAST-CodeQL:
