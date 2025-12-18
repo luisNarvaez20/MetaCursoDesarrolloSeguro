@@ -10,29 +10,29 @@ jobs:
       fail-fast: false
       matrix:
         os: [ "ubuntu-20.04" ] # [ "macos-latest", "windows-latest", "ubuntu-20.04" ]
-        # Test once with explicit manifest_file, and once without
         manifest_file: [ "pom.xml" ]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash
     name: SCA Java project
+
     steps:
-      - name: Checkout action
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Setup Java
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v3
         with:
           distribution: temurin
           java-version: 11
           cache: maven
 
       - name: Install SCA tool (CRDA)
-        uses: redhat-actions/openshift-tools-installer@v1
+        uses: redhat-actions/openshift-tools-installer@v2
         with:
           source: github
-          github_pat: ${{ github.token }}
+          github_pat: ${{ secrets.GITHUB_TOKEN }}
           crda: "latest"
 
       - name: Print JSON analysis report
