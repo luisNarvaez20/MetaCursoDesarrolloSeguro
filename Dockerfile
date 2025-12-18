@@ -1,4 +1,4 @@
-FROM bellsoft/liberica-openjdk17-alpine
+FROM openjdk:17-slim
 
 VOLUME /tmp
 COPY target/*.jar app.jar
