@@ -57,7 +57,20 @@ jobs:
         id: set-output
         run: echo "image-tag=$(echo '${{ steps.meta.outputs.tags }}' | cut -d',' -f1)" >> $GITHUB_OUTPUT
 
-      - name: Run Container Image Scan
-        uses: ./.github/workflows/container-image-scan.yml
+      # --- Escaneo de la imagen con Trivy ---
+      - name: Pull Docker image
+        run: docker pull ${{ steps.set-output.outputs.image-tag }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.24.0
         with:
-          image-tag: ${{ steps.set-output.outputs.image-tag }} # pasa la imagen recién construida
+          image-ref: ${{ steps.set-output.outputs.image-tag }}
+          format: 'template'
+          template: '@/contrib/sarif.tpl'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
