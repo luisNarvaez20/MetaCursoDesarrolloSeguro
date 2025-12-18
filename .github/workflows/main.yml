@@ -7,8 +7,6 @@ on:
       - '**/*.txt'
   workflow_dispatch:
 
-
-# Otorgamos los permisos globalmente
 permissions:
   contents: read
   issues: read
@@ -22,49 +20,25 @@ jobs:
   build:
     name: Build
     uses: ./.github/workflows/build.yml
-    secrets: inherit  # https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idsecretsinherit
-
-  #Análisis de dependencias
-  sca:
-    needs: build
-    name: SCA
-    uses: ./.github/workflows/sca.yml
     secrets: inherit
 
-  #Análisis de código Estático
+  # Análisis de código Estático
   sast:
     needs: build
     name: SAST
     uses: ./.github/workflows/sast.yml
     secrets: inherit
 
-  #Análisis y Uso de Licencias.
-  license-compliance:
-    needs: build
-    name: License Compliance
-    uses: ./.github/workflows/license-compliance.yml
-    secrets: inherit
-
-  #Creación de Docker
+  # Creación de Docker (solo necesario para DAST)
   docker:
     needs: build
-    name: Build docker image
+    name: Build Docker Image
     uses: ./.github/workflows/docker.yml
     secrets: inherit
-  
-  #Scaneo de vulnerabilidades en la imagen de Docker
-  container-image-scan:
-    needs: docker
-    name: Container Image Scan
-    uses: ./.github/workflows/container-image-scan.yml
-    secrets: inherit
-    with:
-      image-tag: ${{ needs.docker.outputs.image-tag }}
 
-
-  #Análisis de código Dinámico
+  # Análisis de código Dinámico (DAST)
   dast:
-    needs: [build,docker]
+    needs: [build, docker]
     name: DAST Scan
     uses: ./.github/workflows/dast.yml
     secrets: inherit

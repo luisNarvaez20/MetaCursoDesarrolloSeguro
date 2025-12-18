@@ -1,8 +1,11 @@
 name: 04 SAST
 
 on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
   workflow_dispatch:
-  workflow_call:
 
 jobs:
   SAST-CodeQL:
@@ -62,13 +65,13 @@ jobs:
         with:
           category: "/language:${{ matrix.language }}"
 
-      - name: Docker Cleanup and Run
-        run: |
-          docker rm demoApp || true
-          docker run -d -p 8080:8080 --name demoApp myapp-image
-        # Asegúrate de reemplazar 'myapp-image' con el nombre correcto de la imagen
+      - name: Upload CodeQL SARIF report
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ github.workspace }}/results.sarif
 
-  spotbugs:
+  SpotBugs:
     name: SAST SpotBugs
     needs: [SAST-CodeQL]
     runs-on: ubuntu-latest
@@ -81,7 +84,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run SpotBugs action
+      - name: Run SpotBugs
         uses: jmservera/spotbugs-github-action@v0.2.0
         with:
           packages: com.example.-
@@ -89,7 +92,7 @@ jobs:
           dependenciesPath: ~/.m2
           basePath: src/main/java
 
-      - name: Upload Spotbugs report
+      - name: Upload SpotBugs SARIF report
         uses: actions/upload-artifact@v4
         with:
           name: spotbugs-sarif

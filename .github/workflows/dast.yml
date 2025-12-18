@@ -1,14 +1,11 @@
 name: 50 DAST Scan Docker Image
 
 on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
   workflow_dispatch:
-    inputs:
-      image-tag:
-        type: string
-        description: 'The name of the docker image to scan'
-        required: true
-
-  workflow_call:
     inputs:
       image-tag:
         type: string
@@ -17,7 +14,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_TAG: ${{ github.event.inputs['image-tag'] }}
+  IMAGE_TAG: ${{ github.event.inputs['image-tag'] || github.ref_name }}
 
 jobs:
   dast-scan:
@@ -25,6 +22,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
@@ -39,25 +39,30 @@ jobs:
 
       - name: Wait for container to start
         run: |
-          timeout 300 bash -c 'until [[ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8080)" == "200" ]]; do sleep 5; done' || false
+          echo "Waiting for application to be ready..."
+          timeout 300 bash -c 'until [[ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8080)" == "200" ]]; do sleep 5; done'
 
       - name: Test container
         run: curl -s localhost:8080/echo?msg=Hello%20World!
 
-      - name: ZAP Full Scan
+      - name: ZAP Full Scan (HTML + JSON)
         uses: zaproxy/action-full-scan@v0.12.0
         with:
           docker_name: 'owasp/zap2docker-stable'
           token: ${{ secrets.GITHUB_TOKEN }}
           target: 'http://localhost:8080'
           cmd_options: '-a -j -l WARN -z "-addoninstallall"'
+          format: 'both'  # Genera HTML y JSON
+          report_name: 'DAST_Report'
           allow_issue_writing: false
 
-      - name: Upload HTML report
+      - name: Upload Reports
         uses: actions/upload-artifact@v4
         with:
-          name: DAST_Report.html
-          path: report_html.html
+          name: DAST_Reports
+          path: |
+            DAST_Report.html
+            DAST_Report.json
 
       - name: Stop and clean up Docker container
         if: always()
