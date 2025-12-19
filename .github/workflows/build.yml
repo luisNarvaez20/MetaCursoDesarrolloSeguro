@@ -41,7 +41,7 @@ jobs:
       with:
         name: Test-Results
         path: test-results
-    - name: Publish Test Results
+    - name: Publish T 
       uses: EnricoMi/publish-unit-test-result-action@v2.0.0
       if: always()
       with:
