@@ -18,12 +18,12 @@ jobs:
     permissions:
       contents: read
       packages: write
-      security-events: write  # ← AGREGAR ESTO
-      actions: read           # ← Recomendado también
+      security-events: write
+      actions: read
     outputs:
       image-tag: ${{ steps.set-output.outputs.image-tag }}
     steps:
-      - uses: actions/checkout@v4  # ← Actualizado a v4
+      - uses: actions/checkout@v4
 
       - name: Download application binary
         uses: actions/download-artifact@v4
@@ -40,16 +40,15 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5  # ← Actualizado a v5
+        uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}
           tags: |
             type=ref,event=branch
-            type=schedule,pattern=main
             type=sha,prefix={{branch}}-
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5  # ← Actualizado a v5
+        uses: docker/build-push-action@v5
         with:
           context: .
           push: true
@@ -58,23 +57,24 @@ jobs:
 
       - name: Set output for workflow_call
         id: set-output
-        run: echo "image-tag=$(echo '${{ steps.meta.outputs.tags }}' | cut -d',' -f1)" >> $GITHUB_OUTPUT
+        run: |
+          # Extraer solo el primer tag y remover saltos de línea
+          IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1 | tr -d '\n\r')
+          echo "image-tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "Selected image tag: ${IMAGE_TAG}"
 
       # --- Escaneo de la imagen con Trivy ---
-      - name: Pull Docker image
-        run: docker pull ${{ steps.set-output.outputs.image-tag }}
-
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: ${{ steps.set-output.outputs.image-tag }}
-          format: 'sarif'  # ← Simplificado
+          format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v4  # ← Actualizado a v4
-        if: always()  # ← Subir incluso si Trivy encuentra vulnerabilidades
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
         with:
           sarif_file: 'trivy-results.sarif'
-          category: 'trivy-container'  # ← Identificador único
+          category: 'trivy-container'
