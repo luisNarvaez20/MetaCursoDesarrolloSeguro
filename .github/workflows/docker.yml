@@ -18,10 +18,12 @@ jobs:
     permissions:
       contents: read
       packages: write
+      security-events: write  # ← AGREGAR ESTO
+      actions: read           # ← Recomendado también
     outputs:
       image-tag: ${{ steps.set-output.outputs.image-tag }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4  # ← Actualizado a v4
 
       - name: Download application binary
         uses: actions/download-artifact@v4
@@ -34,19 +36,20 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.SECRET }} # Aquí tu PAT
+          password: ${{ secrets.SECRET }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5  # ← Actualizado a v5
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}
           tags: |
             type=ref,event=branch
             type=schedule,pattern=main
+            type=sha,prefix={{branch}}-
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v5  # ← Actualizado a v5
         with:
           context: .
           push: true
@@ -65,12 +68,13 @@ jobs:
         uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: ${{ steps.set-output.outputs.image-tag }}
-          format: 'template'
-          template: '@/contrib/sarif.tpl'
+          format: 'sarif'  # ← Simplificado
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4  # ← Actualizado a v4
+        if: always()  # ← Subir incluso si Trivy encuentra vulnerabilidades
         with:
           sarif_file: 'trivy-results.sarif'
+          category: 'trivy-container'  # ← Identificador único
