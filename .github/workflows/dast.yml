@@ -1,4 +1,4 @@
-name: 50 DAST Scan Docker Image
+name: 05 DAST Scan Docker Image
 
 on:
   workflow_dispatch:
@@ -15,60 +15,101 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_TAG: ${{ github.event.inputs['image-tag'] || github.ref_name }}
 
 jobs:
   dast-scan:
     name: DAST Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set image tag variable
+        id: image
+        run: |
+          # Para workflow_call usa inputs.image-tag
+          # Para workflow_dispatch usa github.event.inputs.image-tag
+          if [ -n "${{ inputs.image-tag }}" ]; then
+            IMAGE="${{ inputs.image-tag }}"
+          else
+            IMAGE="${{ github.event.inputs.image-tag }}"
+          fi
+          echo "tag=${IMAGE}" >> $GITHUB_OUTPUT
+          echo "Using image: ${IMAGE}"
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.SECRET }}  # ← Usa tu PAT, no GITHUB_TOKEN
+
+      - name: Clean up existing container
+        run: docker rm -f demoApp || true
+
+      - name: Pull Docker image
+        run: |
+          echo "Pulling image: ${{ steps.image.outputs.tag }}"
+          docker pull ${{ steps.image.outputs.tag }}
 
       - name: Start demo app container
         run: |
-          docker rm demoApp || true
-          docker run -d -p 8080:8080 --name demoApp ${{ env.IMAGE_TAG }}
+          docker run -d \
+            -p 8080:8080 \
+            --name demoApp \
+            ${{ steps.image.outputs.tag }}
 
       - name: Wait for container to start
         run: |
           echo "Waiting for application to be ready..."
-          timeout 300 bash -c 'until [[ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8080)" == "200" ]]; do sleep 5; done'
+          for i in {1..60}; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Application is ready! (attempt $i)"
+              exit 0
+            fi
+            echo "⏳ Attempt $i/60: HTTP $HTTP_CODE - waiting..."
+            sleep 5
+          done
+          echo "❌ Application failed to start in 5 minutes"
+          echo "Container logs:"
+          docker logs demoApp
+          exit 1
 
       - name: Test container
-        run: curl -s localhost:8080/echo?msg=Hello%20World!
+        run: |
+          echo "Testing application endpoint..."
+          curl -v http://localhost:8080/echo?msg=Hello%20World! || true
 
-      - name: ZAP Full Scan (HTML + JSON)
+      - name: ZAP Full Scan
         uses: zaproxy/action-full-scan@v0.12.0
         with:
-          docker_name: 'owasp/zap2docker-stable'
+          docker_name: 'ghcr.io/zaproxy/zaproxy:stable'
           token: ${{ secrets.GITHUB_TOKEN }}
-          target: 'http://localhost:8080'
-          cmd_options: '-a -j -l WARN -z "-addoninstallall"'
-          format: 'both'  # Genera HTML y JSON
-          report_name: 'DAST_Report'
+          target: 'http://172.17.0.1:8080'  # ← IP del host Docker
+          cmd_options: '-a -j -l WARN'
+          rules_file_name: '.zap/rules.tsv'
           allow_issue_writing: false
+          artifact_name: 'zap-scan'
 
-      - name: Upload Reports
+      - name: Upload ZAP Reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: DAST_Reports
+          name: DAST-Reports
           path: |
-            DAST_Report.html
-            DAST_Report.json
+            zap-scan.html
+            zap-scan.json
+            zap-scan.md
 
-      - name: Stop and clean up Docker container
+      - name: Stop and clean up
         if: always()
         run: |
           docker stop demoApp || true
           docker rm demoApp || true
-          docker container prune --force
-          docker image prune --force
+          docker system prune -f
